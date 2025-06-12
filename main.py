@@ -1,9 +1,11 @@
 import os
 import sys
+from time import sleep
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from prompts import system_prompt
 from call_function import available_functions, call_function
 
 
@@ -24,31 +26,28 @@ def read_prop(argv):
 def main(argv):
     user_prompt, verbose = read_prop(argv)
 
-    system_prompt = """
-        You are a helpful AI coding agent.
-
-        When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
-
-        - List files and directories
-        - Read file contents
-        - Execute Python files with optional arguments
-        - Write or overwrite files
-
-        All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
-        """
-
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
+
+    if verbose:
+        print(f"User prompt: {user_prompt}")
 
     messages = [
         types.Content(role="user", parts=[types.Part(text=user_prompt)])
     ]
 
-    generate_content(client, messages, system_prompt, verbose, user_prompt)
+    for i in range(20):
+        try:
+            response = generate_content(client, messages, verbose)
+            sleep(4)
+        except Exception as e:
+            print(f"Error in generate_content: {e}")
+
+    print(response)
 
 
-def generate_content(client, messages, system_prompt, verbose, user_prompt):
+def generate_content(client, messages, verbose):
     response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
@@ -57,8 +56,12 @@ def generate_content(client, messages, system_prompt, verbose, user_prompt):
         )
     )
 
+    if response.candidates:
+        for cadidate in response.candidates:
+            response_content = cadidate.content
+            messages.append(response_content)
+
     if verbose:
-        print(f"User prompt: {user_prompt}")
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
